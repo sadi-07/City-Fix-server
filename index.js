@@ -57,10 +57,20 @@ async function run() {
         });
 
         // Get All Users
+        // app.get('/users', async (req, res) => {
+        //     const result = await usersCollection.find().toArray();
+        //     res.send(result);
+        // });
+
         app.get('/users', async (req, res) => {
-            const result = await usersCollection.find().toArray();
+            const role = req.query.role;
+
+            const query = role ? { role } : {}; // if ?role=staff → filter only staff
+
+            const result = await usersCollection.find(query).toArray();
             res.send(result);
         });
+
 
         // Get User by Email
         app.get('/users/:email', async (req, res) => {
@@ -136,7 +146,7 @@ async function run() {
 
             issue.created_at = new Date();
             issue.status = "Pending";
-            issue.priority = "normal";
+            issue.priority = "Normal";
             issue.upvoteCount = 0;
             issue.upvotedBy = [];
             issue.assignedStaff = null;
@@ -177,6 +187,18 @@ async function run() {
             const count = await issuesCollection.countDocuments({ userEmail: email });
 
             res.send({ count });
+        });
+
+        // DELETE issue on reject
+        app.patch("/issues/reject/:id", async (req, res) => {
+            const id = req.params.id;
+            const result = await issuesCollection.deleteOne({ _id: new ObjectId(id) });
+
+            if (result.deletedCount === 0) {
+                return res.status(404).send({ message: "Issue not found" });
+            }
+
+            res.send({ success: true, message: "Issue deleted" });
         });
 
 
@@ -276,6 +298,17 @@ async function run() {
             );
             res.send({ success: true });
         });
+
+
+        app.delete("/staff/:email", async (req, res) => {
+            const email = req.params.email;
+
+            const result = await usersCollection.deleteOne({ email });
+
+            res.send(result);
+        });
+
+
 
         // ==========================================================
         // STAFF — Assigned Issues
