@@ -98,7 +98,7 @@ async function run() {
         // ==========================================================
 
 
-        
+
 
 
         // Get issues (all or by email)
@@ -119,10 +119,16 @@ async function run() {
         app.post("/issues", async (req, res) => {
             const issue = req.body;
 
-            // Check user issue limit
-            const user = await usersCollection.findOne({ email: issue.email });
+            // ⬇⬇ ALWAYS override reporter email with logged-in user's email
+            const reporterEmail = issue.userEmail; // sent from frontend AuthContext ONLY
+            if (!reporterEmail) return res.status(400).send({ message: "Reporter email missing" });
 
-            const count = await issuesCollection.countDocuments({ email: issue.email });
+            issue.email = reporterEmail; // permanently set and override any form input
+
+            // ===== existing logic unchanged =====
+            const user = await usersCollection.findOne({ email: reporterEmail });
+
+            const count = await issuesCollection.countDocuments({ email: reporterEmail });
 
             if (!user.premium && count >= 3) {
                 return res.status(403).send({ message: "Free users can submit max 3 issues" });
@@ -130,21 +136,26 @@ async function run() {
 
             issue.created_at = new Date();
             issue.status = "Pending";
+            issue.priority = "normal";
             issue.upvoteCount = 0;
             issue.upvotedBy = [];
             issue.assignedStaff = null;
+
             issue.timeline = [
                 {
                     status: "Created",
                     message: "Issue submitted",
-                    updatedBy: issue.email,
-                    time: new Date()
-                }
+                    updatedBy: reporterEmail,
+                    time: new Date(),
+                },
             ];
 
             const result = await issuesCollection.insertOne(issue);
             res.send(result);
         });
+
+
+
 
         // Update Issue (citizen)
         app.patch("/issues/:id", async (req, res) => {
@@ -159,6 +170,15 @@ async function run() {
             const updated = await issuesCollection.findOne({ _id: new ObjectId(id) });
             res.send(updated);
         });
+
+        app.get("/issues/count/:email", async (req, res) => {
+            const email = req.params.email;
+
+            const count = await issuesCollection.countDocuments({ userEmail: email });
+
+            res.send({ count });
+        });
+
 
         // Delete Issue
         app.delete("/issues/:id", async (req, res) => {
