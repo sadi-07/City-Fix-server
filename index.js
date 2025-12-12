@@ -422,6 +422,38 @@ async function run() {
             res.send(stats);
         });
 
+
+        app.get("/admin/latest-issues", async (req, res) => {
+            const result = await issuesCollection
+                .find()
+                .sort({ createdAt: -1 })
+                .limit(5)
+                .toArray();
+
+            res.send(result);
+        });
+
+        app.get("/admin/latest-payments", async (req, res) => {
+            const result = await paymentsCollection
+                .find()
+                .sort({ paidAt: -1 })
+                .limit(5)
+                .toArray();
+
+            res.send(result);
+        });
+
+        app.get("/admin/latest-users", async (req, res) => {
+            const result = await usersCollection
+                .find()
+                .sort({ createdAt: -1 })
+                .limit(5)
+                .toArray();
+
+            res.send(result);
+        });
+
+
         console.log("MongoDB Connected Successfully");
     } finally { }
 }
