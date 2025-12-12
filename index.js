@@ -201,6 +201,16 @@ async function run() {
             res.send({ success: true, message: "Issue deleted" });
         });
 
+        app.get("/staff/issues/:email", async (req, res) => {
+            const issues = await issuesCollection.find({
+                "assignedStaff.email": req.params.email
+            })
+                .sort({ priority: -1 })
+                .toArray();
+
+            res.send(issues);
+        });
+
 
         // Delete Issue
         app.delete("/issues/:id", async (req, res) => {
@@ -254,8 +264,20 @@ async function run() {
             const id = req.params.id;
             const { staffId } = req.body;
 
-            const staff = await usersCollection.findOne({ _id: new ObjectId(staffId) });
+            // 1) Get the issue
+            const issue = await issuesCollection.findOne({ _id: new ObjectId(id) });
+            if (!issue) return res.status(404).send({ message: "Issue not found" });
 
+            // 2) Block reassignment (permanently disabled once assigned)
+            if (issue.assignedStaff) {
+                return res.status(400).send({ message: "Staff already assigned" });
+            }
+
+            // 3) Get the staff from users collection
+            const staff = await usersCollection.findOne({ _id: new ObjectId(staffId) });
+            if (!staff) return res.status(404).send({ message: "Staff not found" });
+
+            // 4) Update issue
             await issuesCollection.updateOne(
                 { _id: new ObjectId(id) },
                 {
@@ -263,41 +285,53 @@ async function run() {
                         assignedStaff: {
                             id: staff._id,
                             name: staff.name,
-                            email: staff.email
-                        }
+                            email: staff.email,
+                        },
+                        assignedDate: new Date()
+                        // ❗ REQUIREMENT: Status must NOT change (stay "Pending")
                     },
                     $push: {
                         timeline: {
                             status: "Assigned",
-                            message: `Assigned to: ${staff.name}`,
+                            message: `Assigned to ${staff.name}`,
                             updatedBy: "Admin",
-                            time: new Date()
-                        }
-                    }
+                            time: new Date(),
+                        },
+                    },
                 }
             );
 
             res.send({ success: true });
         });
+
 
         // Reject Issue
         app.patch("/issues/reject/:id", async (req, res) => {
-            await issuesCollection.updateOne(
-                { _id: new ObjectId(req.params.id) },
-                {
-                    $set: { status: "Rejected" },
-                    $push: {
-                        timeline: {
-                            status: "Rejected",
-                            message: "Issue rejected",
-                            updatedBy: "Admin",
-                            time: new Date()
-                        }
-                    }
-                }
-            );
-            res.send({ success: true });
+            const id = req.params.id;
+
+            const result = await issuesCollection.deleteOne({
+                _id: new ObjectId(id),
+            });
+
+            if (result.deletedCount === 0) {
+                return res.status(404).send({ message: "Issue not found" });
+            }
+
+            res.send({ success: true, message: "Issue deleted" });
         });
+
+        // Staff — Get issues resolved by this staff
+        app.get("/staff/resolved/:email", async (req, res) => {
+            const email = req.params.email;
+
+            const resolvedIssues = await issuesCollection.find({
+                status: "Resolved",
+                updatedBy: email
+            }).toArray();
+
+            res.send(resolvedIssues);
+        });
+
 
 
         app.delete("/staff/:email", async (req, res) => {
@@ -359,6 +393,15 @@ async function run() {
             const updated = await issuesCollection.findOne({ _id: new ObjectId(id) });
             res.send(updated);
         });
+
+        app.get("/issues/assigned/:email", async (req, res) => {
+            const email = req.params.email;
+            const issues = await issuesCollection
+                .find({ "assignedStaff.email": email })
+                .toArray();
+            res.send(issues);
+        });
+
 
         // ==========================================================
         // ADMIN DASHBOARD STATS
