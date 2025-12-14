@@ -426,7 +426,7 @@ async function run() {
         app.get("/admin/latest-issues", async (req, res) => {
             const result = await issuesCollection
                 .find()
-                .sort({ createdAt: -1 })
+                .sort({ created_at: -1 })
                 .limit(5)
                 .toArray();
 
@@ -436,7 +436,7 @@ async function run() {
         app.get("/admin/latest-payments", async (req, res) => {
             const result = await paymentsCollection
                 .find()
-                .sort({ paidAt: -1 })
+                .sort({ paid_at: -1 })
                 .limit(5)
                 .toArray();
 
@@ -446,7 +446,7 @@ async function run() {
         app.get("/admin/latest-users", async (req, res) => {
             const result = await usersCollection
                 .find()
-                .sort({ createdAt: -1 })
+                .sort({ created_at: -1 })
                 .limit(5)
                 .toArray();
 
