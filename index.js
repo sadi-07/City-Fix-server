@@ -212,6 +212,22 @@ async function run() {
         });
 
 
+        // Get latest resolved issues (limit 6)
+        app.get("/issues/resolved/latest", async (req, res) => {
+            try {
+                const issues = await issuesCollection
+                    .find({ status: "Closed" })
+                    .sort({ updatedAt: -1 }) // latest resolved first
+                    .limit(6)
+                    .toArray();
+
+                res.send(issues);
+            } catch (error) {
+                res.status(500).send({ message: "Failed to fetch resolved issues" });
+            }
+        });
+
+
         // Delete Issue
         app.delete("/issues/:id", async (req, res) => {
             await issuesCollection.deleteOne({ _id: new ObjectId(req.params.id) });
