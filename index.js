@@ -3,6 +3,7 @@ const cors = require('cors');
 const app = express();
 require('dotenv').config();
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const stripe = require('stripe')(process.env.STRIPE_SECRET);
 
 const port = process.env.PORT || 3000;
 
@@ -468,6 +469,98 @@ async function run() {
 
             res.send(result);
         });
+
+
+        // ==========================================================
+        // 🚀 BOOST ISSUE (ONLY NEW CODE ADDED)
+        // ==========================================================
+
+        app.patch("/issues/boost/:id", async (req, res) => {
+            const id = req.params.id;
+            const { userEmail } = req.body;
+
+            const issue = await issuesCollection.findOne({
+                _id: new ObjectId(id)
+            });
+
+            if (!issue) {
+                return res.status(404).send({ message: "Issue not found" });
+            }
+
+            if (issue.priority === "High") {
+                return res.status(400).send({ message: "Issue already boosted" });
+            }
+
+            // payment mock (100 BDT)
+            const paymentSuccess = true;
+            if (!paymentSuccess) {
+                return res.status(400).send({ message: "Payment failed" });
+            }
+
+            await issuesCollection.updateOne(
+                { _id: new ObjectId(id) },
+                {
+                    $set: { priority: "High" },
+                    $push: {
+                        timeline: {
+                            status: "Boosted",
+                            message: "Issue boosted with 100 BDT",
+                            updatedBy: userEmail,
+                            time: new Date()
+                        }
+                    }
+                }
+            );
+
+            res.send({ success: true });
+        });
+
+
+        // ==========================================================
+        //   SUBSCRIBE USER
+        // ==========================================================
+
+        app.patch("/users/subscribe/:email", async (req, res) => {
+            const email = req.params.email;
+
+            const user = await usersCollection.findOne({ email });
+
+            if (!user) {
+                return res.status(404).send({ message: "User not found" });
+            }
+
+            if (user.blocked) {
+                return res.status(403).send({ message: "User is blocked" });
+            }
+
+            if (user.subscription?.status === "active") {
+                return res.status(400).send({ message: "Already subscribed" });
+            }
+
+            // 💳 MOCK PAYMENT (1000 TK)
+            const paymentSuccess = true;
+            if (!paymentSuccess) {
+                return res.status(400).send({ message: "Payment failed" });
+            }
+
+            await usersCollection.updateOne(
+                { email },
+                {
+                    $set: {
+                        subscription: {
+                            status: "active",
+                            plan: "Premium",
+                            subscribedAt: new Date()
+                        },
+                        premium: true
+                    }
+                }
+            );
+
+            const updatedUser = await usersCollection.findOne({ email });
+            res.send(updatedUser);
+        });
+
 
 
         console.log("MongoDB Connected Successfully");
