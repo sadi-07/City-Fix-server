@@ -568,43 +568,96 @@ async function run() {
         //   PAYMENT
         // ==========================================================
 
-        app.post('/create-checkout-session', async (req, res) => {
-    try {
-        const { issueName, senderEmail } = req.body;
+        app.post("/create-checkout-session", async (req, res) => {
+  const { email, type, issueId } = req.body;
 
-        if (!issueName || !senderEmail) {
-            return res.status(400).send({ message: "Missing payment info" });
-        }
+  const session = await stripe.checkout.sessions.create({
+    line_items: [
+      {
+        price_data: {
+          currency: "bdt",
+          unit_amount: type === "subscribe" ? 1000 * 100 : 100 * 100,
+          product_data: {
+            name: type === "subscribe"
+              ? "Premium Subscription"
+              : "Issue Boost",
+          },
+        },
+        quantity: 1,
+      },
+    ],
 
-        const session = await stripe.checkout.sessions.create({
-            line_items: [
-                {
-                    price_data: {
-                        currency: 'bdt',   // lowercase REQUIRED
-                        unit_amount: 100 * 100, // 100 BDT
-                        product_data: {
-                            name: issueName,
-                        },
-                    },
-                    quantity: 1,
-                },
-            ],
-            customer_email: senderEmail,
-            mode: 'payment',
-            success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success`,
-            cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
-        });
+    mode: "payment",
+    customer_email: email,
 
-        res.send({ url: session.url });
+    // 🔑 REQUIRED — DO NOT REMOVE
+    metadata: {
+      email,
+      type,
+      issueId: issueId || "",
+    },
 
-    } catch (error) {
-        console.error("🔥 STRIPE ERROR FULL:", error);
-        res.status(500).send({
-            message: "Stripe checkout failed",
-            error: error.message,
-        });
-    }
+    success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
+  });
+
+  res.send({ url: session.url });
 });
+
+
+
+app.post("/payments/verify", async (req, res) => {
+  const { sessionId } = req.body;
+
+  const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+  // 🛑 STOP DUPLICATES
+  const exists = await paymentsCollection.findOne({
+    stripeSessionId: session.id,
+  });
+
+  if (exists) {
+    return res.send({ message: "Payment already recorded" });
+  }
+
+  await paymentsCollection.insertOne({
+    email: session.metadata.email,
+    type: session.metadata.type,
+    issueId: session.metadata.issueId || null,
+    amount: session.amount_total / 100,
+    currency: session.currency,
+    stripeSessionId: session.id,
+    paymentStatus: session.payment_status,
+    createdAt: new Date(),
+  });
+
+  // 🎯 APPLY BUSINESS LOGIC
+  if (session.metadata.type === "subscribe") {
+    await usersCollection.updateOne(
+      { email: session.metadata.email },
+      {
+        $set: {
+          premium: true,
+          subscription: {
+            status: "active",
+            subscribedAt: new Date(),
+          },
+        },
+      }
+    );
+  }
+
+  if (session.metadata.type === "boost") {
+    await issuesCollection.updateOne(
+      { _id: new ObjectId(session.metadata.issueId) },
+      { $set: { priority: "High" } }
+    );
+  }
+
+  res.send({ success: true });
+});
+
+
 
 
 
