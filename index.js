@@ -5,6 +5,8 @@ require('dotenv').config();
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const stripe = require('stripe')(process.env.STRIPE_SECRET);
 
+console.log("Stripe key loaded:", process.env.STRIPE_SECRET ? "YES" : "NO");
+
 const port = process.env.PORT || 3000;
 
 app.use(express.json());
@@ -560,6 +562,51 @@ async function run() {
             const updatedUser = await usersCollection.findOne({ email });
             res.send(updatedUser);
         });
+
+
+        // ==========================================================
+        //   PAYMENT
+        // ==========================================================
+
+        app.post('/create-checkout-session', async (req, res) => {
+    try {
+        const { issueName, senderEmail } = req.body;
+
+        if (!issueName || !senderEmail) {
+            return res.status(400).send({ message: "Missing payment info" });
+        }
+
+        const session = await stripe.checkout.sessions.create({
+            line_items: [
+                {
+                    price_data: {
+                        currency: 'bdt',   // lowercase REQUIRED
+                        unit_amount: 100 * 100, // 100 BDT
+                        product_data: {
+                            name: issueName,
+                        },
+                    },
+                    quantity: 1,
+                },
+            ],
+            customer_email: senderEmail,
+            mode: 'payment',
+            success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success`,
+            cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
+        });
+
+        res.send({ url: session.url });
+
+    } catch (error) {
+        console.error("🔥 STRIPE ERROR FULL:", error);
+        res.status(500).send({
+            message: "Stripe checkout failed",
+            error: error.message,
+        });
+    }
+});
+
+
 
 
 
