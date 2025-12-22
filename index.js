@@ -12,9 +12,7 @@ const port = process.env.PORT || 3000;
 app.use(express.json());
 app.use(cors());
 
-// =========================
-// DATABASE CONNECT
-// =========================
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.r81fqjh.mongodb.net/?retryWrites=true&w=majority`;
 
 const client = new MongoClient(uri, {
@@ -36,10 +34,10 @@ async function run() {
         const paymentsCollection = db.collection("payments");
 
         // ==========================================================
-        // USERS (Citizen + Staff + Admin)
+        // USERS
         // ==========================================================
 
-        // Create User
+
         app.post('/users', async (req, res) => {
             const user = req.body;
 
@@ -59,30 +57,24 @@ async function run() {
             res.send(result);
         });
 
-        // Get All Users
-        // app.get('/users', async (req, res) => {
-        //     const result = await usersCollection.find().toArray();
-        //     res.send(result);
-        // });
 
         app.get('/users', async (req, res) => {
             const role = req.query.role;
 
-            const query = role ? { role } : {}; // if ?role=staff → filter only staff
+            const query = role ? { role } : {};
 
             const result = await usersCollection.find(query).toArray();
             res.send(result);
         });
 
 
-        // Get User by Email
         app.get('/users/:email', async (req, res) => {
             const user = await usersCollection.findOne({ email: req.params.email });
             if (!user) return res.status(404).send({ message: "User not found" });
             res.send(user);
         });
 
-        // Block/Unblock user
+
         app.patch('/users/block/:email', async (req, res) => {
             const { blocked } = req.body;
             const result = await usersCollection.updateOne(
@@ -92,7 +84,7 @@ async function run() {
             res.send({ success: true });
         });
 
-        // Update staff/admin profile
+
         app.patch("/users/update/:email", async (req, res) => {
             const email = req.params.email;
             const updateData = req.body;
@@ -114,7 +106,7 @@ async function run() {
 
 
 
-        // Get issues (all or by email)
+
         app.get("/issues", async (req, res) => {
             const { email } = req.query;
             const query = email ? { email } : {};
@@ -122,23 +114,21 @@ async function run() {
             res.send(issues);
         });
 
-        // Get single issue
+
         app.get("/issues/:id", async (req, res) => {
             const issue = await issuesCollection.findOne({ _id: new ObjectId(req.params.id) });
             res.send(issue);
         });
 
-        // Create issue
+
         app.post("/issues", async (req, res) => {
             const issue = req.body;
 
-            // ⬇⬇ ALWAYS override reporter email with logged-in user's email
-            const reporterEmail = issue.userEmail; // sent from frontend AuthContext ONLY
+
+            const reporterEmail = issue.userEmail;
             if (!reporterEmail) return res.status(400).send({ message: "Reporter email missing" });
 
-            issue.email = reporterEmail; // permanently set and override any form input
-
-            // ===== existing logic unchanged =====
+            issue.email = reporterEmail;
             const user = await usersCollection.findOne({ email: reporterEmail });
 
             const count = await issuesCollection.countDocuments({ email: reporterEmail });
@@ -170,7 +160,7 @@ async function run() {
 
 
 
-        // Update Issue (citizen)
+
         app.patch("/issues/:id", async (req, res) => {
             const id = req.params.id;
             const updatedData = req.body;
@@ -192,7 +182,7 @@ async function run() {
             res.send({ count });
         });
 
-        // DELETE issue on reject
+
         app.patch("/issues/reject/:id", async (req, res) => {
             const id = req.params.id;
             const result = await issuesCollection.deleteOne({ _id: new ObjectId(id) });
@@ -215,12 +205,12 @@ async function run() {
         });
 
 
-        // Get latest resolved issues (limit 6)
+
         app.get("/issues/resolved/latest", async (req, res) => {
             try {
                 const issues = await issuesCollection
                     .find({ status: "Closed" })
-                    .sort({ updatedAt: -1 }) // latest resolved first
+                    .sort({ updatedAt: -1 })
                     .limit(6)
                     .toArray();
 
@@ -231,15 +221,13 @@ async function run() {
         });
 
 
-        // Delete Issue
+
         app.delete("/issues/:id", async (req, res) => {
             await issuesCollection.deleteOne({ _id: new ObjectId(req.params.id) });
             res.send({ success: true });
         });
 
-        // ==========================================================
-        // ⭐ UPVOTE SYSTEM (User can upvote only once)
-        // ==========================================================
+
         app.patch("/issues/upvote/:id", async (req, res) => {
             const id = req.params.id;
             const { userEmail } = req.body;
@@ -276,27 +264,25 @@ async function run() {
             res.send(updatedIssue);
         });
 
-        // ==========================================================
-        // ADMIN — ASSIGN STAFF
-        // ==========================================================
+
         app.patch("/issues/assign/:id", async (req, res) => {
             const id = req.params.id;
             const { staffId } = req.body;
 
-            // 1) Get the issue
+
             const issue = await issuesCollection.findOne({ _id: new ObjectId(id) });
             if (!issue) return res.status(404).send({ message: "Issue not found" });
 
-            // 2) Block reassignment (permanently disabled once assigned)
+
             if (issue.assignedStaff) {
                 return res.status(400).send({ message: "Staff already assigned" });
             }
 
-            // 3) Get the staff from users collection
+
             const staff = await usersCollection.findOne({ _id: new ObjectId(staffId) });
             if (!staff) return res.status(404).send({ message: "Staff not found" });
 
-            // 4) Update issue
+
             await issuesCollection.updateOne(
                 { _id: new ObjectId(id) },
                 {
@@ -307,7 +293,7 @@ async function run() {
                             email: staff.email,
                         },
                         assignedDate: new Date()
-                        // ❗ REQUIREMENT: Status must NOT change (stay "Pending")
+
                     },
                     $push: {
                         timeline: {
@@ -324,7 +310,7 @@ async function run() {
         });
 
 
-        // Reject Issue
+
         app.patch("/issues/reject/:id", async (req, res) => {
             const id = req.params.id;
 
@@ -339,7 +325,7 @@ async function run() {
             res.send({ success: true, message: "Issue deleted" });
         });
 
-        // Staff — Get issues resolved by this staff
+
         app.get("/staff/resolved/:email", async (req, res) => {
             const email = req.params.email;
 
@@ -363,20 +349,18 @@ async function run() {
 
 
 
-        // ==========================================================
-        // STAFF — Assigned Issues
-        // ==========================================================
+
         app.get("/staff/issues/:email", async (req, res) => {
             const issues = await issuesCollection.find({
                 "assignedStaff.email": req.params.email
             })
-                .sort({ priority: -1 }) // boosted first
+                .sort({ priority: -1 })
                 .toArray();
 
             res.send(issues);
         });
 
-        // Staff — Change Issue Status
+
         app.patch("/issues/status/:id", async (req, res) => {
             const id = req.params.id;
             const { status, updatedBy } = req.body;
@@ -422,24 +406,47 @@ async function run() {
         });
 
 
-        // ==========================================================
-        // ADMIN DASHBOARD STATS
-        // ==========================================================
-        app.get("/admin/stats", async (req, res) => {
-            const stats = {
-                totalIssues: await issuesCollection.countDocuments(),
-                pendingIssues: await issuesCollection.countDocuments({ status: "Pending" }),
-                inProgress: await issuesCollection.countDocuments({ status: "In-Progress" }),
-                working: await issuesCollection.countDocuments({ status: "Working" }),
-                resolved: await issuesCollection.countDocuments({ status: "Resolved" }),
-                closed: await issuesCollection.countDocuments({ status: "Closed" }),
-                rejected: await issuesCollection.countDocuments({ status: "Rejected" }),
-                totalUsers: await usersCollection.countDocuments(),
-                totalPayments: 0 // you will add later
-            };
 
-            res.send(stats);
+        app.get("/admin/stats", async (req, res) => {
+            try {
+
+                const totalPaymentsAgg = await paymentsCollection
+                    .aggregate([{ $group: { _id: null, total: { $sum: "$amount" } } }])
+                    .toArray();
+                const totalPayments = totalPaymentsAgg[0]?.total || 0;
+
+
+                const boostedIssues = await issuesCollection.countDocuments({ priority: "High" });
+
+
+                const closedCount = await issuesCollection.countDocuments({ status: "Closed" });
+
+
+                const pendingCount = await issuesCollection.countDocuments({ status: "Pending" });
+
+
+                const totalIssues = await issuesCollection.countDocuments();
+
+
+                const totalUsers = await usersCollection.countDocuments();
+
+                const stats = {
+                    totalIssues,
+                    pendingIssues: pendingCount,
+                    closed: closedCount,
+                    boostedIssues,
+                    totalUsers,
+                    totalPayments,
+                };
+
+                res.send(stats);
+            } catch (error) {
+                console.error(error);
+                res.status(500).send({ message: "Failed to fetch admin stats" });
+            }
         });
+
+
 
 
         app.get("/admin/latest-issues", async (req, res) => {
@@ -473,9 +480,7 @@ async function run() {
         });
 
 
-        // ==========================================================
-        // 🚀 BOOST ISSUE (ONLY NEW CODE ADDED)
-        // ==========================================================
+
 
         app.patch("/issues/boost/:id", async (req, res) => {
             const id = req.params.id;
@@ -493,7 +498,7 @@ async function run() {
                 return res.status(400).send({ message: "Issue already boosted" });
             }
 
-            // payment mock (100 BDT)
+
             const paymentSuccess = true;
             if (!paymentSuccess) {
                 return res.status(400).send({ message: "Payment failed" });
@@ -518,9 +523,6 @@ async function run() {
         });
 
 
-        // ==========================================================
-        //   SUBSCRIBE USER
-        // ==========================================================
 
         app.patch("/users/subscribe/:email", async (req, res) => {
             const email = req.params.email;
@@ -539,7 +541,7 @@ async function run() {
                 return res.status(400).send({ message: "Already subscribed" });
             }
 
-            // 💳 MOCK PAYMENT (1000 TK)
+
             const paymentSuccess = true;
             if (!paymentSuccess) {
                 return res.status(400).send({ message: "Payment failed" });
@@ -564,120 +566,127 @@ async function run() {
         });
 
 
-        // ==========================================================
-        //   PAYMENT
-        // ==========================================================
+
 
 
         app.get("/payments", async (req, res) => {
-  try {
-    const payments = await paymentsCollection.find({}).toArray();
-    res.send(payments);
-  } catch (error) {
-    res.status(500).send({ message: "Failed to fetch payments" });
-  }
-});
+            try {
+                const { email } = req.query;
+
+
+                const query = email ? { email } : {};
+
+                const payments = await paymentsCollection
+                    .find(query)
+                    .toArray();
+
+                res.send(payments);
+            } catch (error) {
+                res.status(500).send({ message: "Failed to fetch payments" });
+            }
+        });
+
 
 
         app.post("/create-checkout-session", async (req, res) => {
-  const { email, type, issueId } = req.body;
+            const { email, type, issueId } = req.body;
 
-  const session = await stripe.checkout.sessions.create({
-    line_items: [
-      {
-        price_data: {
-          currency: "bdt",
-          unit_amount: type === "subscribe" ? 1000 * 100 : 100 * 100,
-          product_data: {
-            name: type === "subscribe"
-              ? "Premium Subscription"
-              : "Issue Boost",
-          },
-        },
-        quantity: 1,
-      },
-    ],
+            const session = await stripe.checkout.sessions.create({
+                line_items: [
+                    {
+                        price_data: {
+                            currency: "bdt",
+                            unit_amount: type === "subscribe" ? 1000 * 100 : 100 * 100,
+                            product_data: {
+                                name: type === "subscribe"
+                                    ? "Premium Subscription"
+                                    : "Issue Boost",
+                            },
+                        },
+                        quantity: 1,
+                    },
+                ],
 
-    mode: "payment",
-    customer_email: email,
-
-    // 🔑 REQUIRED — DO NOT REMOVE
-    metadata: {
-      email,
-      type,
-      issueId: issueId || "",
-    },
-
-    success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
-  });
-
-  res.send({ url: session.url });
-});
+                mode: "payment",
+                customer_email: email,
 
 
+                metadata: {
+                    email,
+                    type,
+                    issueId: issueId || "",
+                },
 
-app.post("/payments/verify", async (req, res) => {
-  const { sessionId } = req.body;
+                success_url: `${process.env.SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+                cancel_url: `${process.env.SITE_DOMAIN}/dashboard/payment-cancelled`,
+            });
 
-  const session = await stripe.checkout.sessions.retrieve(sessionId);
-
-  // 🛑 STOP DUPLICATES
-  const exists = await paymentsCollection.findOne({
-    stripeSessionId: session.id,
-  });
-
-  if (exists) {
-    return res.send({ message: "Payment already recorded" });
-  }
-
-  await paymentsCollection.insertOne({
-    email: session.metadata.email,
-    type: session.metadata.type,
-    issueId: session.metadata.issueId || null,
-    amount: session.amount_total / 100,
-    currency: session.currency,
-    stripeSessionId: session.id,
-    paymentStatus: session.payment_status,
-    createdAt: new Date(),
-  });
-
-  // 🎯 APPLY BUSINESS LOGIC
-  if (session.metadata.type === "subscribe") {
-    await usersCollection.updateOne(
-      { email: session.metadata.email },
-      {
-        $set: {
-          premium: true,
-          subscription: {
-            status: "active",
-            subscribedAt: new Date(),
-          },
-        },
-      }
-    );
-  }
-
-  if (session.metadata.type === "boost") {
-  await issuesCollection.updateOne(
-    { _id: new ObjectId(session.metadata.issueId) },
-    {
-      $set: { priority: "High" },
-      $push: {
-        timeline: {
-          status: "Boosted",
-          message: "Issue boosted via payment",
-          updatedBy: session.metadata.email,
-          time: new Date(),
-        },
-      },
-    }
-  );
-}
+            res.send({ url: session.url });
+        });
 
 
-  res.send({ success: true });
-});
+
+        app.post("/payments/verify", async (req, res) => {
+            const { sessionId } = req.body;
+
+            const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+
+            const exists = await paymentsCollection.findOne({
+                stripeSessionId: session.id,
+            });
+
+            if (exists) {
+                return res.send({ message: "Payment already recorded" });
+            }
+
+            await paymentsCollection.insertOne({
+                email: session.metadata.email,
+                type: session.metadata.type,
+                issueId: session.metadata.issueId || null,
+                amount: session.amount_total / 100,
+                currency: session.currency,
+                stripeSessionId: session.id,
+                paymentStatus: session.payment_status,
+                createdAt: new Date(),
+            });
+
+
+            if (session.metadata.type === "subscribe") {
+                await usersCollection.updateOne(
+                    { email: session.metadata.email },
+                    {
+                        $set: {
+                            premium: true,
+                            subscription: {
+                                status: "active",
+                                subscribedAt: new Date(),
+                            },
+                        },
+                    }
+                );
+            }
+
+            if (session.metadata.type === "boost") {
+                await issuesCollection.updateOne(
+                    { _id: new ObjectId(session.metadata.issueId) },
+                    {
+                        $set: { priority: "High" },
+                        $push: {
+                            timeline: {
+                                status: "Boosted",
+                                message: "Issue boosted via payment",
+                                updatedBy: session.metadata.email,
+                                time: new Date(),
+                            },
+                        },
+                    }
+                );
+            }
+
+
+            res.send({ success: true });
+        });
 
 
 
@@ -691,7 +700,7 @@ app.post("/payments/verify", async (req, res) => {
 
 run().catch(console.dir);
 
-// Home Route
+
 app.get("/", (req, res) => {
     res.send("CityFix backend running...");
 });
