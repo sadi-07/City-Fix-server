@@ -27,13 +27,13 @@ const client = new MongoClient(uri, {
 
 async function run() {
     try {
-        await client.connect();
+        //await client.connect();
 
         const db = client.db("city_fix_db");
 
         const usersCollection = db.collection("users");
         const issuesCollection = db.collection("issues");
-        const paymentsCollection = db.collection("payments"); // empty for now
+        const paymentsCollection = db.collection("payments");
 
         // ==========================================================
         // USERS (Citizen + Staff + Admin)
@@ -568,6 +568,17 @@ async function run() {
         //   PAYMENT
         // ==========================================================
 
+
+        app.get("/payments", async (req, res) => {
+  try {
+    const payments = await paymentsCollection.find({}).toArray();
+    res.send(payments);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to fetch payments" });
+  }
+});
+
+
         app.post("/create-checkout-session", async (req, res) => {
   const { email, type, issueId } = req.body;
 
@@ -648,11 +659,22 @@ app.post("/payments/verify", async (req, res) => {
   }
 
   if (session.metadata.type === "boost") {
-    await issuesCollection.updateOne(
-      { _id: new ObjectId(session.metadata.issueId) },
-      { $set: { priority: "High" } }
-    );
-  }
+  await issuesCollection.updateOne(
+    { _id: new ObjectId(session.metadata.issueId) },
+    {
+      $set: { priority: "High" },
+      $push: {
+        timeline: {
+          status: "Boosted",
+          message: "Issue boosted via payment",
+          updatedBy: session.metadata.email,
+          time: new Date(),
+        },
+      },
+    }
+  );
+}
+
 
   res.send({ success: true });
 });
