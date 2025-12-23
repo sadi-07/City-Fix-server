@@ -206,19 +206,21 @@ async function run() {
 
 
 
-        app.get("/issues/resolved/latest", async (req, res) => {
-            try {
-                const issues = await issuesCollection
-                    .find({ status: "Closed" })
-                    .sort({ updatedAt: -1 })
-                    .limit(6)
-                    .toArray();
+       app.get("/issues/resolved/latest", async (req, res) => {
+    try {
+        const issues = await issuesCollection
+            .find({ status: "Closed" })     
+            .sort({ created_at: -1 })       
+            .limit(6)                       
+            .toArray();
 
-                res.send(issues);
-            } catch (error) {
-                res.status(500).send({ message: "Failed to fetch resolved issues" });
-            }
-        });
+        res.send(issues);
+    } catch (error) {
+        res.status(500).send({ message: "Failed to fetch resolved issues" });
+    }
+});
+
+
 
 
 
